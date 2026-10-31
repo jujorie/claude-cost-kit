@@ -146,3 +146,74 @@ JSON
   [[ "$output" == *"jq is required"* ]]
   [ ! -e "$TARGET" ]
 }
+
+@test "statusLine using \$CLAUDE_CONFIG_DIR for the same file counts as ours" {
+  export CLAUDE_CONFIG_DIR="$TARGET"
+  mkdir -p "$TARGET"
+  echo '{"statusLine":{"type":"command","command":"bash \"$CLAUDE_CONFIG_DIR/statusline.sh\""}}' > "$TARGET/settings.json"
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ok: statusLine already runs $TARGET/statusline.sh"* ]]
+  [[ "$output" != *"kept:"* ]]
+  [ "$(settings .statusLine.command)" = 'bash "$CLAUDE_CONFIG_DIR/statusline.sh"' ]
+}
+
+@test "statusLine variants with \${CLAUDE_CONFIG_DIR}, \$HOME and ~ count as ours" {
+  unset CLAUDE_CONFIG_DIR
+  TARGET="$HOME/.claude"
+  for cmd in \
+    'bash ${CLAUDE_CONFIG_DIR}/statusline.sh' \
+    "bash '\$HOME/.claude/statusline.sh'" \
+    '~/.claude/statusline.sh' \
+    'sh ${HOME}//.claude/statusline.sh '; do
+    mkdir -p "$TARGET"
+    jq -n --arg c "$cmd" '{statusLine: {type: "command", command: $c}}' > "$TARGET/settings.json"
+    run bash "$SCRIPT"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"ok: statusLine already runs"* ]] || { echo "not recognized: $cmd"; return 1; }
+    [ "$(settings .statusLine.command)" = "$cmd" ]
+  done
+}
+
+@test "\$CLAUDE_CONFIG_DIR pointing elsewhere is another statusLine" {
+  export CLAUDE_CONFIG_DIR="$BATS_TEST_TMPDIR/other"
+  mkdir -p "$TARGET"
+  echo '{"statusLine":{"type":"command","command":"bash \"$CLAUDE_CONFIG_DIR/statusline.sh\""}}' > "$TARGET/settings.json"
+  run bash "$SCRIPT" "$TARGET"
+  [[ "$output" == *"kept:"* ]]
+}
+
+@test "a different script in the same dir is another statusLine" {
+  mkdir -p "$TARGET"
+  jq -n --arg c "bash \"$TARGET/statusline-old.sh\"" '{statusLine: {type: "command", command: $c}}' > "$TARGET/settings.json"
+  run bash "$SCRIPT" "$TARGET"
+  [[ "$output" == *"kept:"* ]]
+}
+
+@test "SessionEnd hook written with \$CLAUDE_CONFIG_DIR is not duplicated" {
+  export CLAUDE_CONFIG_DIR="$TARGET"
+  mkdir -p "$TARGET"
+  echo '{"hooks":{"SessionEnd":[{"hooks":[{"type":"command","command":"bash \"$CLAUDE_CONFIG_DIR/cost/cost-log.sh\""}]}]}}' > "$TARGET/settings.json"
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [ "$(settings '.hooks.SessionEnd | length')" = 1 ]
+  [ "$(settings '.hooks.SessionEnd[0].hooks[0].command')" = 'bash "$CLAUDE_CONFIG_DIR/cost/cost-log.sh"' ]
+}
+
+@test "hooks without a command field do not break the merge" {
+  mkdir -p "$TARGET"
+  echo '{"hooks":{"SessionEnd":[{"hooks":[{"type":"prompt","prompt":"bye"}]}]}}' > "$TARGET/settings.json"
+  run bash "$SCRIPT" "$TARGET"
+  [ "$status" -eq 0 ]
+  [ "$(settings '.hooks.SessionEnd | length')" = 2 ]
+}
+
+@test "unchanged settings.json is not rewritten or backed up" {
+  bash "$SCRIPT" "$TARGET"
+  rm -f "$TARGET"/settings.json.bak-*
+  run bash "$SCRIPT" "$TARGET"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"unchanged: $TARGET/settings.json"* ]]
+  [[ "$output" != *"updated:"* ]]
+  [ -z "$(ls "$TARGET"/settings.json.bak-* 2>/dev/null)" ]
+}

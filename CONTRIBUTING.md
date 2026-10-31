@@ -96,3 +96,7 @@ Open an issue with:
 ## Security
 
 The scripts read JSON from Claude Code and write into your config dir. If you find a way to make them write outside that dir, run arbitrary commands, or corrupt user settings, report it privately to the maintainer instead of opening a public issue.
+
+## License
+
+By contributing, you agree that your contributions are licensed under the [MIT License](LICENSE).

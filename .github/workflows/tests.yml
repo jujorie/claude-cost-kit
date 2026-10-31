@@ -1,0 +1,41 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y bats jq shellcheck
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install bats-core jq shellcheck
+
+      - name: Versions
+        run: |
+          bash --version | head -1
+          bats --version
+          jq --version
+          shellcheck --version | sed -n 2p
+
+      - name: Lint
+        run: shellcheck setup.sh statusline.sh cost/*.sh
+
+      - name: Unit tests
+        run: bats tests/

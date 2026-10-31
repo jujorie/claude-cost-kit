@@ -21,3 +21,7 @@ Restart Claude Code afterwards.
 Unit tests use [bats](https://github.com/bats-core/bats-core) (`brew install bats-core`) and run in a temporary `CLAUDE_CONFIG_DIR`, so they never touch `~/.claude`:
 
     bats tests/
+
+## License
+
+[MIT](LICENSE)
